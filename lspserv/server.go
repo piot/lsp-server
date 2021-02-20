@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sourcegraph/jsonrpc2"
+	"github.com/piot/jsonrpc2"
 )
 
 func listen(addr string) (*net.Listener, error) {

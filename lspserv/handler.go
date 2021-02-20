@@ -8,14 +8,12 @@ import (
 	"log"
 	"sync"
 
-	"github.com/sourcegraph/go-langserver/langserver"
-	"github.com/sourcegraph/go-langserver/langserver/util"
+	"github.com/piot/jsonrpc2"
 	"github.com/sourcegraph/go-lsp"
-	"github.com/sourcegraph/jsonrpc2"
 )
 
 type Handler interface {
-	Reset(init *langserver.InitializeParams) error
+	Reset() error
 	ShutDown()
 	HandleHover(ctx context.Context, conn jsonrpc2.JSONRPC2, req *jsonrpc2.Request, params lsp.TextDocumentPositionParams) (*lsp.Hover, error)
 	ResetCaches(lock bool)
@@ -24,8 +22,7 @@ type Handler interface {
 type HandleLspRequests struct {
 	handler Handler
 	mu      sync.Mutex
-	init    *langserver.InitializeParams // set by "initialize" request
-
+	init    bool
 }
 
 func NewLspRequests(handler Handler) *HandleLspRequests {
@@ -86,13 +83,10 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 	log.Printf("got an request! %v\n", req)
 	// Prevent any uncaught panics from taking the entire server down.
 	defer func() {
-		if perr := util.Panicf(recover(), "%v", req.Method); perr != nil {
-			err = perr
-		}
 	}()
 
 	h.mu.Lock()
-	if req.Method != "initialize" && h.init == nil {
+	if req.Method != "initialize" && !h.init {
 		h.mu.Unlock()
 		return nil, errors.New("server must be initialized")
 	}
@@ -100,28 +94,30 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 
 	switch req.Method {
 	case "initialize":
-		if h.init != nil {
+		if !h.init {
 			return nil, errors.New("language server is already initialized")
 		}
 		if req.Params == nil {
 			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
 		}
-		var params langserver.InitializeParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
+		/*
+			var params langserver.InitializeParams
+			if err := json.Unmarshal(*req.Params, &params); err != nil {
+				return nil, err
+			}
+		*/
 
 		// HACK: RootPath is not a URI, but historically we treated it
 		// as such. Convert it to a file URI
 		//if params.RootPath != "" && !util.IsURI(lsp.DocumentURI(params.RootPath)) {
-		params.RootPath = string(util.PathToURI(params.RootPath))
+		//params.RootPath = string(util.PathToURI(params.RootPath))
 		//}
 
-		if err := h.handler.Reset(&params); err != nil {
+		if err := h.handler.Reset(); err != nil {
 			return nil, err
 		}
 
-		h.init = &params
+		h.init = true
 
 		// PERF: Kick off a workspace/symbol in the background to warm up the server
 		kind := lsp.TDSKIncremental

@@ -3,10 +3,9 @@ package main
 import (
 	"context"
 
+	"github.com/piot/jsonrpc2"
 	"github.com/piot/lsp-server/lspserv"
-	"github.com/sourcegraph/go-langserver/langserver"
 	"github.com/sourcegraph/go-lsp"
-	"github.com/sourcegraph/jsonrpc2"
 )
 
 type MyHandler struct {
@@ -38,7 +37,7 @@ func (m *MyHandler) ResetCaches(lock bool) {
 
 }
 
-func (m *MyHandler) Reset(params *langserver.InitializeParams) error {
+func (m *MyHandler) Reset() error {
 	return nil
 }
 
