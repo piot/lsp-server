@@ -40,7 +40,6 @@ func isFileSystemRequest(method string) bool {
 
 // handle implements jsonrpc2.Handler.
 func (h *HandleLspRequests) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) /*(result interface{}, err error)*/ {
-	log.Printf("got an  json request! %v\n", req)
 	result, err := h.HandleInternal(ctx, conn, req)
 	if err != nil {
 		log.Printf("error: %v\n", err)
@@ -51,8 +50,6 @@ func (h *HandleLspRequests) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 		}
 		return
 	}
-
-	log.Printf("got an  json response to send! %v\n", result)
 
 	resp := &jsonrpc2.Response{ID: req.ID}
 	if err == nil {
@@ -68,7 +65,6 @@ func (h *HandleLspRequests) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	}
 
 	if !req.Notif {
-		log.Printf("sending response! %v\n", resp)
 		if err := conn.SendResponse(ctx, resp); err != nil {
 			if err != jsonrpc2.ErrClosed {
 				log.Printf("jsonrpc2 handler: sending response %s: %v\n", resp.ID, err)
@@ -80,11 +76,6 @@ func (h *HandleLspRequests) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 }
 
 func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JSONRPC2, req *jsonrpc2.Request) (result interface{}, err error) {
-	log.Printf("got an request! %v\n", req)
-	// Prevent any uncaught panics from taking the entire server down.
-	defer func() {
-	}()
-
 	h.mu.Lock()
 	if req.Method != "initialize" && !h.init {
 		h.mu.Unlock()
@@ -121,6 +112,7 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 
 		// PERF: Kick off a workspace/symbol in the background to warm up the server
 		kind := lsp.TDSKIncremental
+
 		var completionOp *lsp.CompletionOptions
 
 		return lsp.InitializeResult{
@@ -150,12 +142,14 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 
 	case "shutdown":
 		h.handler.ShutDown()
+
 		return nil, nil
 
 	case "exit":
 		if c, ok := conn.(*jsonrpc2.Conn); ok {
 			c.Close()
 		}
+
 		return nil, nil
 
 	case "$/cancelRequest":
@@ -163,20 +157,26 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 		if req.Params == nil {
 			return nil, nil
 		}
+
 		var params lsp.CancelParams
+
 		if err := json.Unmarshal(*req.Params, &params); err != nil {
 			return nil, nil
 		}
+
 		return nil, nil
 
 	case "textDocument/hover":
 		if req.Params == nil {
 			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
 		}
+
 		var params lsp.TextDocumentPositionParams
+
 		if err := json.Unmarshal(*req.Params, &params); err != nil {
 			return nil, err
 		}
+
 		return h.handler.HandleHover(ctx, conn, req, params)
 
 		/*

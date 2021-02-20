@@ -35,10 +35,15 @@ func newHandler(implementationHandler Handler) (jsonrpc2.Handler, io.Closer) {
 func RunForever(addr string, implementationHandler Handler) error {
 	var connOpt []jsonrpc2.ConnOpt
 
+	stdErrLogger := log.New(os.Stderr, "", log.LstdFlags)
+	connOpt = append(connOpt, jsonrpc2.LogMessages(stdErrLogger))
+
 	handler, closer := newHandler(implementationHandler)
 
-	<-jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(stdrwc{},
-		jsonrpc2.VSCodeObjectCodec{}), handler, connOpt...).DisconnectNotify()
+	connection := jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(stdrwc{},
+		jsonrpc2.VSCodeObjectCodec{}), handler, connOpt...)
+
+	<-connection.DisconnectNotify()
 
 	err := closer.Close()
 	if err != nil {
@@ -46,5 +51,4 @@ func RunForever(addr string, implementationHandler Handler) error {
 	}
 
 	return nil
-
 }
