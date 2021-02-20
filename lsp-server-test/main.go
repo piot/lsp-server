@@ -52,6 +52,32 @@ func (m *MyHandler) HandleTextDocumentReferences(params lsp.ReferenceParams, con
 	return []*lsp.Location{}, nil
 }
 
+func (m *MyHandler) HandleTextDocumentCompletion(params lsp.CompletionParams, conn lspserv.Connection) (*lsp.CompletionList, error) {
+	return &lsp.CompletionList{
+		IsIncomplete: false,
+		Items: []lsp.CompletionItem{
+			{
+				Label:            "filterMap",
+				Kind:             lsp.CIKFunction,
+				// Tags:
+				Detail:           "filterMap filters out and maps a lot of stuff.",
+				Documentation:    "This is a doc comment",
+				//Preselect
+				SortText:         "",
+				FilterText:       "",
+				InsertText:       "",
+				InsertTextFormat: lsp.ITFPlainText,
+				// InsertTextMode
+				TextEdit:         nil,
+				// AdditionalTextEdit
+				// CommitCharacters
+				// Command:
+				Data:             nil,
+			},
+		},
+	}, nil
+}
+
 func (m *MyHandler) HandleTextDocumentSymbol(params lsp.DocumentSymbolParams,conn lspserv.Connection) ([]*lsp.DocumentSymbol, error) {
 	diagnosticParams := lsp.PublishDiagnosticsParams{
 		URI:         params.TextDocument.URI,

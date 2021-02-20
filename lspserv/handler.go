@@ -28,7 +28,8 @@ type Handler interface {
 	HandleHover(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.Hover, error)
 	HandleGotoDefinition(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.Location, error)
 	HandleTextDocumentReferences(params lsp.ReferenceParams, conn Connection) ([]*lsp.Location, error)
-	HandleTextDocumentSymbol(params lsp.DocumentSymbolParams, conn Connection) ([]*lsp.DocumentSymbol, error)
+	HandleTextDocumentSymbol(params lsp.DocumentSymbolParams, conn Connection) ([]*lsp.DocumentSymbol, error) // Used for outline
+	HandleTextDocumentCompletion(params lsp.CompletionParams, conn Connection) (*lsp.CompletionList, error) // Intellisense when pressing '.'.
 }
 
 type SendOut struct {
@@ -216,14 +217,15 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 		// PERF: Kick off a workspace/symbol in the background to warm up the server
 		kind := lsp.TDSKIncremental
 
-		var completionOp *lsp.CompletionOptions
-
 		return lsp.InitializeResult{
 			Capabilities: lsp.ServerCapabilities{
 				TextDocumentSync: &lsp.TextDocumentSyncOptionsOrKind{
 					Kind: &kind,
 				},
-				CompletionProvider:           completionOp,
+				CompletionProvider:           &lsp.CompletionOptions{
+					ResolveProvider:   false,
+					TriggerCharacters: []string{"."},
+				},
 				DeclarationProvider: 		  &lsp.DeclarationOptions{},
 				DefinitionProvider:           true,
 				TypeDefinitionProvider:       true,
@@ -313,12 +315,8 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 					return nil, err
 				}
 				return h.handleXDefinition(ctx, conn, req, params)
-
+*/
 			case "textDocument/completion":
-				if !h.config.GocodeCompletionEnabled {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeMethodNotFound,
-						Message: fmt.Sprintf("completion is disabled. Enable with flag `-gocodecompletion`")}
-				}
 				if req.Params == nil {
 					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
 				}
@@ -326,8 +324,9 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 				if err := json.Unmarshal(*req.Params, &params); err != nil {
 					return nil, err
 				}
-				return h.handleTextDocumentCompletion(ctx, conn, req, params)
-*/
+
+				return h.handler.HandleTextDocumentCompletion(params, out)
+/*
 			case "textDocument/references":
 				if req.Params == nil {
 					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
