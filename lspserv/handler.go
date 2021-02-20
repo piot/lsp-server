@@ -1,23 +1,49 @@
 package lspserv
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/url"
+	"os"
 	"sync"
 
+	"github.com/piot/go-lsp"
 	"github.com/piot/jsonrpc2"
-	"github.com/sourcegraph/go-lsp"
 )
+
+type Connection interface {
+	PublishDiagnostics(params lsp.PublishDiagnosticsParams) error
+}
+
 
 type Handler interface {
 	Reset() error
-	ShutDown()
-	HandleHover(ctx context.Context, conn jsonrpc2.JSONRPC2, req *jsonrpc2.Request, params lsp.TextDocumentPositionParams) (*lsp.Hover, error)
 	ResetCaches(lock bool)
+	ShutDown()
+	HandleHover(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.Hover, error)
+	HandleGotoDefinition(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.Location, error)
+	HandleTextDocumentReferences(params lsp.ReferenceParams, conn Connection) ([]*lsp.Location, error)
+	HandleTextDocumentSymbol(params lsp.DocumentSymbolParams, conn Connection) ([]*lsp.DocumentSymbol, error)
 }
+
+type SendOut struct {
+	conn jsonrpc2.JSONRPC2
+	ctx context.Context
+}
+
+func NewSendOut(conn jsonrpc2.JSONRPC2, ctx context.Context) *SendOut {
+	return &SendOut{conn: conn, ctx:ctx}
+}
+
+func (s *SendOut) PublishDiagnostics(params lsp.PublishDiagnosticsParams) error {
+	return s.conn.Notify(s.ctx, "textDocument/publishDiagnostics", params)
+}
+
 
 type HandleLspRequests struct {
 	handler Handler
@@ -75,6 +101,81 @@ func (h *HandleLspRequests) Handle(ctx context.Context, conn *jsonrpc2.Conn, req
 	}
 }
 
+func (h *HandleLspRequests) readFile(ctx context.Context, uri lsp.DocumentURI) ([]byte, error) {
+	url, err := url.Parse(string(uri))
+	if err != nil {
+		return nil, err
+	}
+	path := url.Path
+	contents, err := ioutil.ReadFile(path)
+	return contents, err
+}
+
+// handleFileSystemRequest handles textDocument/did* requests. The URI the
+// request is for is returned. true is returned if a file was modified.
+func (h *HandleLspRequests) handleFileSystemRequest(ctx context.Context, req *jsonrpc2.Request) (lsp.DocumentURI, bool, error) {
+	do := func(uri lsp.DocumentURI, op func() error) (lsp.DocumentURI, bool, error) {
+		before, beforeErr := h.readFile(ctx, uri)
+		if beforeErr != nil && !os.IsNotExist(beforeErr) {
+			// There is no op that could succeed in this case. (Most
+			// commonly occurs when uri refers to a dir, not a file.)
+			return uri, false, beforeErr
+		}
+		err := op()
+		after, afterErr := h.readFile(ctx, uri)
+		if os.IsNotExist(beforeErr) && os.IsNotExist(afterErr) {
+			// File did not exist before or after so nothing has changed.
+			return uri, false, err
+		} else if afterErr != nil || beforeErr != nil {
+			// If an error prevented us from reading the file
+			// before or after then we assume the file changed to
+			// be conservative.
+			return uri, true, err
+		}
+		return uri, !bytes.Equal(before, after), err
+	}
+
+	switch req.Method {
+	case "textDocument/didOpen":
+		var params lsp.DidOpenTextDocumentParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return "", false, err
+		}
+		return do(params.TextDocument.URI, func() error {
+			return nil
+		})
+
+	case "textDocument/didChange":
+		var params lsp.DidChangeTextDocumentParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return "", false, err
+		}
+		return do(params.TextDocument.URI, func() error {
+			return nil
+		})
+
+	case "textDocument/didClose":
+		var params lsp.DidCloseTextDocumentParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return "", false, err
+		}
+		return do(params.TextDocument.URI, func() error {
+			return nil
+		})
+
+	case "textDocument/didSave":
+		var params lsp.DidSaveTextDocumentParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return "", false, err
+		}
+		// no-op
+		return params.TextDocument.URI, false, nil
+
+	default:
+		panic("unexpected file system request method: " + req.Method)
+	}
+}
+
 func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JSONRPC2, req *jsonrpc2.Request) (result interface{}, err error) {
 	h.mu.Lock()
 	if req.Method != "initialize" && !h.init {
@@ -82,6 +183,8 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 		return nil, errors.New("server must be initialized")
 	}
 	h.mu.Unlock()
+
+	out := NewSendOut(conn, ctx)
 
 	switch req.Method {
 	case "initialize":
@@ -121,6 +224,7 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 					Kind: &kind,
 				},
 				CompletionProvider:           completionOp,
+				DeclarationProvider: 		  &lsp.DeclarationOptions{},
 				DefinitionProvider:           true,
 				TypeDefinitionProvider:       true,
 				DocumentFormattingProvider:   true,
@@ -128,7 +232,7 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 				HoverProvider:                true,
 				ReferencesProvider:           true,
 				WorkspaceSymbolProvider:      true,
-				ImplementationProvider:       true,
+				ImplementationProvider:       &lsp.ImplementationOptions{},
 				XWorkspaceReferencesProvider: true,
 				XDefinitionProvider:          true,
 				XWorkspaceSymbolByProperties: true,
@@ -177,9 +281,8 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 			return nil, err
 		}
 
-		return h.handler.HandleHover(ctx, conn, req, params)
+		return h.handler.HandleHover(params, out)
 
-		/*
 			case "textDocument/definition":
 				if req.Params == nil {
 					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
@@ -188,7 +291,8 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 				if err := json.Unmarshal(*req.Params, &params); err != nil {
 					return nil, err
 				}
-				return h.handleDefinition(ctx, conn, req, params)
+				return h.handler.HandleGotoDefinition(params, out)
+				/*
 
 			case "textDocument/typeDefinition":
 				if req.Params == nil {
@@ -223,7 +327,7 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 					return nil, err
 				}
 				return h.handleTextDocumentCompletion(ctx, conn, req, params)
-
+*/
 			case "textDocument/references":
 				if req.Params == nil {
 					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
@@ -232,8 +336,8 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 				if err := json.Unmarshal(*req.Params, &params); err != nil {
 					return nil, err
 				}
-				return h.handleTextDocumentReferences(ctx, conn, req, params)
-
+				return h.handler.HandleTextDocumentReferences(params, out)
+/*
 			case "textDocument/implementation":
 				if req.Params == nil {
 					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
@@ -243,7 +347,7 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 					return nil, err
 				}
 				return h.handleTextDocumentImplementation(ctx, conn, req, params)
-
+*/
 			case "textDocument/documentSymbol":
 				if req.Params == nil {
 					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
@@ -252,8 +356,8 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 				if err := json.Unmarshal(*req.Params, &params); err != nil {
 					return nil, err
 				}
-				return h.handleTextDocumentSymbol(ctx, conn, req, params)
-
+				return h.handler.HandleTextDocumentSymbol(params, out)
+/*
 			case "textDocument/signatureHelp":
 				if req.Params == nil {
 					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
@@ -297,18 +401,12 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 
 	default:
 		if isFileSystemRequest(req.Method) {
-			/*
-				uri, fileChanged, err := h.handler.handleFileSystemRequest(ctx, req)
-				if fileChanged {
-					// a file changed, so we must re-typecheck and re-enumerate symbols
-					h.handler.resetCaches(true)
-				}
-				if uri != "" {
-					// a user is viewing this path, hint to add it to the cache
-					// (unless we're primarily using binary package cache .a
-					// files).
-				}
-			*/
+			uri, fileChanged, err := h.handleFileSystemRequest(ctx, req)
+			if fileChanged {
+				// a file changed, so we must re-typecheck and re-enumerate symbols
+				h.handler.ResetCaches(true)
+			}
+			log.Printf("fileystem change for '%v'\n", uri)
 			return nil, err
 		}
 

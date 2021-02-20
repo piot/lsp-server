@@ -1,20 +1,22 @@
 package main
 
 import (
-	"context"
+	"github.com/piot/go-lsp"
 
-	"github.com/piot/jsonrpc2"
 	"github.com/piot/lsp-server/lspserv"
-	"github.com/sourcegraph/go-lsp"
 )
+
+
+
 
 type MyHandler struct {
 }
 
-func (m *MyHandler) HandleHover(ctx context.Context, conn jsonrpc2.JSONRPC2, req *jsonrpc2.Request, params lsp.TextDocumentPositionParams) (*lsp.Hover, error) {
+func (m *MyHandler) HandleHover(params lsp.TextDocumentPositionParams, conn lspserv.Connection) (*lsp.Hover, error) {
 	return &lsp.Hover{
-		Contents: []lsp.MarkedString{
-			lsp.RawMarkedString("This is just a hello from lsp server"),
+		Contents: lsp.MarkupContent{
+			Kind: lsp.MUKMarkdown,
+			Value: "this is **markup** content\n---\nIs this the last line?",
 		},
 		Range: &lsp.Range{
 			Start: lsp.Position{
@@ -23,8 +25,112 @@ func (m *MyHandler) HandleHover(ctx context.Context, conn jsonrpc2.JSONRPC2, req
 			},
 			End: lsp.Position{
 				Line:      0,
+				Character: 24,
+			},
+		},
+	}, nil
+}
+
+func (m *MyHandler) HandleGotoDefinition(params lsp.TextDocumentPositionParams, conn lspserv.Connection) (*lsp.Location, error) {
+	return &lsp.Location{
+		URI: params.TextDocument.URI,
+		Range: lsp.Range{
+			Start: lsp.Position{
+				Line:      0,
 				Character: 0,
 			},
+			End: lsp.Position{
+				Line:      0,
+				Character: 40,
+			},
+		},
+	}, nil
+}
+
+// Called after GotoDefinition is used?
+func (m *MyHandler) HandleTextDocumentReferences(params lsp.ReferenceParams, conn lspserv.Connection) ([]*lsp.Location, error) {
+	return []*lsp.Location{}, nil
+}
+
+func (m *MyHandler) HandleTextDocumentSymbol(params lsp.DocumentSymbolParams,conn lspserv.Connection) ([]*lsp.DocumentSymbol, error) {
+	diagnosticParams := lsp.PublishDiagnosticsParams{
+		URI:         params.TextDocument.URI,
+		Diagnostics: []lsp.Diagnostic{
+			{
+				Range: lsp.Range{
+					Start: lsp.Position{
+						Line:      2,
+						Character: 0,
+					},
+					End: lsp.Position{
+						Line:      2,
+						Character: 5,
+					},
+				},
+				Severity: lsp.Warning,
+				Code:     "A1233",
+				Source:   "swamp",
+				Message:  "You can not provide this crappy code",
+			},
+		},
+	}
+
+	conn.PublishDiagnostics(diagnosticParams)
+
+	return []*lsp.DocumentSymbol{
+		{
+			Name:   "name",
+			Detail: "String name",
+			Kind:   lsp.SKProperty,
+			Tags:   nil,
+			Range: lsp.Range{
+				Start: lsp.Position{
+					Line:      0,
+					Character: 0,
+				},
+				End: lsp.Position{
+					Line:      0,
+					Character: 4,
+				},
+			},
+			SelectionRange: lsp.Range{
+				Start: lsp.Position{
+					Line:      0,
+					Character: 0,
+				},
+				End: lsp.Position{
+					Line:      0,
+					Character: 4,
+				},
+			},
+			Children: nil,
+		},
+		{
+			Name:   "2",
+			Detail: "Int",
+			Kind:   lsp.SKNumber,
+			Tags:   nil,
+			Range: lsp.Range{
+				Start: lsp.Position{
+					Line:      0,
+					Character: 6,
+				},
+				End: lsp.Position{
+					Line:      0,
+					Character: 6,
+				},
+			},
+			SelectionRange: lsp.Range{
+				Start: lsp.Position{
+					Line:      0,
+					Character: 6,
+				},
+				End: lsp.Position{
+					Line:      0,
+					Character: 6,
+				},
+			},
+			Children: nil,
 		},
 	}, nil
 }
