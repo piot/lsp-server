@@ -30,6 +30,7 @@ type Handler interface {
 	HandleTextDocumentReferences(params lsp.ReferenceParams, conn Connection) ([]*lsp.Location, error)
 	HandleTextDocumentSymbol(params lsp.DocumentSymbolParams, conn Connection) ([]*lsp.DocumentSymbol, error) // Used for outline
 	HandleTextDocumentCompletion(params lsp.CompletionParams, conn Connection) (*lsp.CompletionList, error) // Intellisense when pressing '.'.
+	HandleTextDocumentSignatureHelp(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.SignatureHelp, error)
 }
 
 type SendOut struct {
@@ -356,7 +357,6 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 					return nil, err
 				}
 				return h.handler.HandleTextDocumentSymbol(params, out)
-/*
 			case "textDocument/signatureHelp":
 				if req.Params == nil {
 					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
@@ -365,7 +365,8 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 				if err := json.Unmarshal(*req.Params, &params); err != nil {
 					return nil, err
 				}
-				return h.handleTextDocumentSignatureHelp(ctx, conn, req, params)
+				return h.handler.HandleTextDocumentSignatureHelp(params, out)
+				/*
 
 			case "textDocument/formatting":
 				if req.Params == nil {

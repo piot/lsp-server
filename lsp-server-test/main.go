@@ -78,6 +78,28 @@ func (m *MyHandler) HandleTextDocumentCompletion(params lsp.CompletionParams, co
 	}, nil
 }
 
+func (m *MyHandler) HandleTextDocumentSignatureHelp(params lsp.TextDocumentPositionParams, conn lspserv.Connection) (*lsp.SignatureHelp, error) {
+	return &lsp.SignatureHelp{
+		Signatures:      []lsp.SignatureInformation{{
+			Label:         "(Int -> a -> b) -> List a -> List b",
+			Documentation: "indexes a lot of maps",
+			Parameters:    []lsp.ParameterInformation{
+				{
+					Label:         "(Int -> a -> b)",
+					Documentation: "a function that takes an int and converts from a to b",
+				},
+				{
+					Label:         "List a",
+					Documentation: "a list of as",
+				},
+				},
+			},
+		},
+		ActiveSignature: 0,
+		ActiveParameter: 0,
+	}, nil
+}
+
 func (m *MyHandler) HandleTextDocumentSymbol(params lsp.DocumentSymbolParams,conn lspserv.Connection) ([]*lsp.DocumentSymbol, error) {
 	diagnosticParams := lsp.PublishDiagnosticsParams{
 		URI:         params.TextDocument.URI,
