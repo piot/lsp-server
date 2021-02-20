@@ -94,7 +94,7 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 
 	switch req.Method {
 	case "initialize":
-		if !h.init {
+		if h.init {
 			return nil, errors.New("language server is already initialized")
 		}
 		if req.Params == nil {
