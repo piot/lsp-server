@@ -18,8 +18,8 @@ import (
 
 type Connection interface {
 	PublishDiagnostics(params lsp.PublishDiagnosticsParams) error
+	//RequestCodeLensRefresh() error
 }
-
 
 type Handler interface {
 	Reset() error
@@ -27,25 +27,60 @@ type Handler interface {
 	ShutDown()
 	HandleHover(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.Hover, error)
 	HandleGotoDefinition(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.Location, error)
-	HandleTextDocumentReferences(params lsp.ReferenceParams, conn Connection) ([]*lsp.Location, error)
-	HandleTextDocumentSymbol(params lsp.DocumentSymbolParams, conn Connection) ([]*lsp.DocumentSymbol, error) // Used for outline
-	HandleTextDocumentCompletion(params lsp.CompletionParams, conn Connection) (*lsp.CompletionList, error) // Intellisense when pressing '.'.
-	HandleTextDocumentSignatureHelp(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.SignatureHelp, error)
+	HandleGotoDeclaration(params lsp.DeclarationOptions, conn Connection) (*lsp.Location, error)
+	HandleGotoTypeDefinition(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.Location, error)
+	HandleGotoImplementation(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.Location, error)
+	HandleFindReferences(params lsp.ReferenceParams, conn Connection) ([]*lsp.Location, error)
+	HandleSymbol(params lsp.DocumentSymbolParams, conn Connection) ([]*lsp.DocumentSymbol, error) // Used for outline
+	HandleCompletion(params lsp.CompletionParams, conn Connection) (*lsp.CompletionList, error)   // Intellisense when pressing '.'.
+	HandleCompletionItemResolve(params lsp.CompletionItem, conn Connection) (*lsp.CompletionItem, error)
+	HandleSignatureHelp(params lsp.TextDocumentPositionParams, conn Connection) (*lsp.SignatureHelp, error)
+	HandleFormatting(params lsp.DocumentFormattingParams, conn Connection) ([]*lsp.TextEdit, error)
+	// HandleRangeFormatting
+	HandleHighlights(params lsp.DocumentHighlightOptions, conn Connection) ([]*lsp.DocumentHighlight, error)
+	HandleCodeAction(params lsp.CodeActionParams, conn Connection) (*lsp.CodeAction, error)
+	HandleCodeActionResolve(params lsp.CodeAction, conn Connection) (*lsp.CodeAction, error)
+	HandleRename(params lsp.RenameParams) (*lsp.WorkspaceEdit, error)
+	HandlePrepareRename(params lsp.PrepareRenameParams) (*lsp.PrepareRenameResult, error)
+	HandleFoldingRange(params lsp.FoldingRangeParams) ([]*lsp.FoldingRange, error)
+	HandleSelectionRange(params lsp.SelectionRangeParams) ([]*lsp.SelectionRange, error)
+
+	HandlePrepareCallHierarchy(params lsp.CallHierarchyPrepareParams) ([]*lsp.CallHierarchyItem, error)
+	HandleCallHierarchyIncomingCalls(params lsp.CallHierarchyIncomingCallsParams, conn Connection) ([]*CallHierarchyIncomingCall, error)
+	HandleCallHierarchyOutgoingCalls(params lsp.CallHierarchyOutgoingCallsParams, conn Connection) ([]*CallHierarchyOutgoingCall, error)
+	HandleSemanticTokens(params lsp.SemanticTokensParams) (*lsp.SemanticTokens, error)
+	HandleLinkedEditingRange()
+	HandleMonikers()
+
+	// HandleLink
+	// HandleLinkResolve
+	// HandleColor
+	// HandleColorPresentation
+
+	/**
+	 * A code lens represents a command that should be shown along with
+	 * source text, like the number of references, a way to run tests, etc.
+	 *
+	 * A code lens is _unresolved_ when no command is associated to it. For
+	 * performance reasons the creation of a code lens and resolving should be done
+	 * in two stages.
+	 */
+	HandleCodeLens(params lsp.CodeLensParams, conn Connection) ([]*lsp.CodeLens, error)
+	HandleCodeLensResolve(params lsp.CodeLens, conn Connection) (*lsp.CodeLens, error)
 }
 
 type SendOut struct {
 	conn jsonrpc2.JSONRPC2
-	ctx context.Context
+	ctx  context.Context
 }
 
 func NewSendOut(conn jsonrpc2.JSONRPC2, ctx context.Context) *SendOut {
-	return &SendOut{conn: conn, ctx:ctx}
+	return &SendOut{conn: conn, ctx: ctx}
 }
 
 func (s *SendOut) PublishDiagnostics(params lsp.PublishDiagnosticsParams) error {
 	return s.conn.Notify(s.ctx, "textDocument/publishDiagnostics", params)
 }
-
 
 type HandleLspRequests struct {
 	handler Handler
@@ -223,11 +258,11 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 				TextDocumentSync: &lsp.TextDocumentSyncOptionsOrKind{
 					Kind: &kind,
 				},
-				CompletionProvider:           &lsp.CompletionOptions{
+				CompletionProvider: &lsp.CompletionOptions{
 					ResolveProvider:   false,
 					TriggerCharacters: []string{"."},
 				},
-				DeclarationProvider: 		  &lsp.DeclarationOptions{},
+				DeclarationProvider:          &lsp.DeclarationOptions{},
 				DefinitionProvider:           true,
 				TypeDefinitionProvider:       true,
 				DocumentFormattingProvider:   true,
@@ -286,97 +321,135 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 
 		return h.handler.HandleHover(params, out)
 
-			case "textDocument/definition":
-				if req.Params == nil {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-				}
-				var params lsp.TextDocumentPositionParams
-				if err := json.Unmarshal(*req.Params, &params); err != nil {
-					return nil, err
-				}
-				return h.handler.HandleGotoDefinition(params, out)
-				/*
+	case "textDocument/definition":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.TextDocumentPositionParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleGotoDefinition(params, out)
 
-			case "textDocument/typeDefinition":
-				if req.Params == nil {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-				}
-				var params lsp.TextDocumentPositionParams
-				if err := json.Unmarshal(*req.Params, &params); err != nil {
-					return nil, err
-				}
-				return h.handleTypeDefinition(ctx, conn, req, params)
+	case "textDocument/declaration":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.DeclarationOptions
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleGotoDeclaration(params, out)
 
-			case "textDocument/xdefinition":
-				if req.Params == nil {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-				}
-				var params lsp.TextDocumentPositionParams
-				if err := json.Unmarshal(*req.Params, &params); err != nil {
-					return nil, err
-				}
-				return h.handleXDefinition(ctx, conn, req, params)
-*/
-			case "textDocument/completion":
-				if req.Params == nil {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-				}
-				var params lsp.CompletionParams
-				if err := json.Unmarshal(*req.Params, &params); err != nil {
-					return nil, err
-				}
+	case "textDocument/typeDefinition":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.TextDocumentPositionParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleGotoTypeDefinition(params, out)
 
-				return h.handler.HandleTextDocumentCompletion(params, out)
-/*
-			case "textDocument/references":
-				if req.Params == nil {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-				}
-				var params lsp.ReferenceParams
-				if err := json.Unmarshal(*req.Params, &params); err != nil {
-					return nil, err
-				}
-				return h.handler.HandleTextDocumentReferences(params, out)
-/*
-			case "textDocument/implementation":
-				if req.Params == nil {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-				}
-				var params lsp.TextDocumentPositionParams
-				if err := json.Unmarshal(*req.Params, &params); err != nil {
-					return nil, err
-				}
-				return h.handleTextDocumentImplementation(ctx, conn, req, params)
-*/
-			case "textDocument/documentSymbol":
-				if req.Params == nil {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-				}
-				var params lsp.DocumentSymbolParams
-				if err := json.Unmarshal(*req.Params, &params); err != nil {
-					return nil, err
-				}
-				return h.handler.HandleTextDocumentSymbol(params, out)
-			case "textDocument/signatureHelp":
-				if req.Params == nil {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-				}
-				var params lsp.TextDocumentPositionParams
-				if err := json.Unmarshal(*req.Params, &params); err != nil {
-					return nil, err
-				}
-				return h.handler.HandleTextDocumentSignatureHelp(params, out)
-				/*
+	case "textDocument/completion":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.CompletionParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
 
-			case "textDocument/formatting":
-				if req.Params == nil {
-					return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-				}
-				var params lsp.DocumentFormattingParams
-				if err := json.Unmarshal(*req.Params, &params); err != nil {
-					return nil, err
-				}
-				return h.handleTextDocumentFormatting(ctx, conn, req, params)
+		return h.handler.HandleCompletion(params, out)
+	case "completionItem/resolve":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.CompletionItem
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+
+		return h.handler.HandleCompletionItemResolve(params, out)
+	case "textDocument/references":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.ReferenceParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleFindReferences(params, out)
+	case "textDocument/implementation":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.TextDocumentPositionParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleGotoImplementation(params, out)
+	case "textDocument/documentSymbol":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.DocumentSymbolParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleSymbol(params, out)
+	case "textDocument/signatureHelp":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.TextDocumentPositionParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleSignatureHelp(params, out)
+
+	case "textDocument/formatting":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.DocumentFormattingParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleFormatting(params, out)
+
+	case "textDocument/codeAction":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.CodeActionParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleCodeAction(params, out)
+
+	case "textDocument/documentHighlight":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.DocumentHighlightParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleHighlights(params, out)
+
+	case "textDocument/codeLens":
+		if req.Params == nil {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+		}
+		var params lsp.CodeLensParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return nil, err
+		}
+		return h.handler.HandleCodeLens(params, out)
+
+		/*
+
 
 			case "workspace/symbol":
 				if req.Params == nil {

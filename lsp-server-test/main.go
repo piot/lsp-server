@@ -6,16 +6,13 @@ import (
 	"github.com/piot/lsp-server/lspserv"
 )
 
-
-
-
 type MyHandler struct {
 }
 
 func (m *MyHandler) HandleHover(params lsp.TextDocumentPositionParams, conn lspserv.Connection) (*lsp.Hover, error) {
 	return &lsp.Hover{
 		Contents: lsp.MarkupContent{
-			Kind: lsp.MUKMarkdown,
+			Kind:  lsp.MUKMarkdown,
 			Value: "this is **markup** content\n---\nIs this the last line?",
 		},
 		Range: &lsp.Range{
@@ -47,6 +44,22 @@ func (m *MyHandler) HandleGotoDefinition(params lsp.TextDocumentPositionParams, 
 	}, nil
 }
 
+func (m *MyHandler) HandleGotoTypeDefinition(params lsp.TextDocumentPositionParams, conn lspserv.Connection) (*lsp.Location, error) {
+	return &lsp.Location{
+		URI: params.TextDocument.URI,
+		Range: lsp.Range{
+			Start: lsp.Position{
+				Line:      0,
+				Character: 0,
+			},
+			End: lsp.Position{
+				Line:      0,
+				Character: 40,
+			},
+		},
+	}, nil
+}
+
 // Called after GotoDefinition is used?
 func (m *MyHandler) HandleTextDocumentReferences(params lsp.ReferenceParams, conn lspserv.Connection) ([]*lsp.Location, error) {
 	return []*lsp.Location{}, nil
@@ -57,22 +70,22 @@ func (m *MyHandler) HandleTextDocumentCompletion(params lsp.CompletionParams, co
 		IsIncomplete: false,
 		Items: []lsp.CompletionItem{
 			{
-				Label:            "filterMap",
-				Kind:             lsp.CIKFunction,
+				Label: "filterMap",
+				Kind:  lsp.CIKFunction,
 				// Tags:
-				Detail:           "filterMap filters out and maps a lot of stuff.",
-				Documentation:    "This is a doc comment",
+				Detail:        "filterMap filters out and maps a lot of stuff.",
+				Documentation: "This is a doc comment",
 				//Preselect
 				SortText:         "",
 				FilterText:       "",
 				InsertText:       "",
 				InsertTextFormat: lsp.ITFPlainText,
 				// InsertTextMode
-				TextEdit:         nil,
+				TextEdit: nil,
 				// AdditionalTextEdit
 				// CommitCharacters
 				// Command:
-				Data:             nil,
+				Data: nil,
 			},
 		},
 	}, nil
@@ -80,10 +93,10 @@ func (m *MyHandler) HandleTextDocumentCompletion(params lsp.CompletionParams, co
 
 func (m *MyHandler) HandleTextDocumentSignatureHelp(params lsp.TextDocumentPositionParams, conn lspserv.Connection) (*lsp.SignatureHelp, error) {
 	return &lsp.SignatureHelp{
-		Signatures:      []lsp.SignatureInformation{{
+		Signatures: []lsp.SignatureInformation{{
 			Label:         "(Int -> a -> b) -> List a -> List b",
 			Documentation: "indexes a lot of maps",
-			Parameters:    []lsp.ParameterInformation{
+			Parameters: []lsp.ParameterInformation{
 				{
 					Label:         "(Int -> a -> b)",
 					Documentation: "a function that takes an int and converts from a to b",
@@ -92,17 +105,17 @@ func (m *MyHandler) HandleTextDocumentSignatureHelp(params lsp.TextDocumentPosit
 					Label:         "List a",
 					Documentation: "a list of as",
 				},
-				},
 			},
+		},
 		},
 		ActiveSignature: 0,
 		ActiveParameter: 0,
 	}, nil
 }
 
-func (m *MyHandler) HandleTextDocumentSymbol(params lsp.DocumentSymbolParams,conn lspserv.Connection) ([]*lsp.DocumentSymbol, error) {
+func (m *MyHandler) HandleTextDocumentSymbol(params lsp.DocumentSymbolParams, conn lspserv.Connection) ([]*lsp.DocumentSymbol, error) {
 	diagnosticParams := lsp.PublishDiagnosticsParams{
-		URI:         params.TextDocument.URI,
+		URI: params.TextDocument.URI,
 		Diagnostics: []lsp.Diagnostic{
 			{
 				Range: lsp.Range{
