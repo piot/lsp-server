@@ -49,8 +49,8 @@ type Handler interface {
 	//HandleCallHierarchyIncomingCalls(params lsp.CallHierarchyIncomingCallsParams, conn Connection) ([]*CallHierarchyIncomingCall, error)
 	//HandleCallHierarchyOutgoingCalls(params lsp.CallHierarchyOutgoingCallsParams, conn Connection) ([]*CallHierarchyOutgoingCall, error)
 	//HandleSemanticTokens(params lsp.SemanticTokensParams) (*lsp.SemanticTokens, error)
-	HandleLinkedEditingRange()
-	HandleMonikers()
+	//HandleLinkedEditingRange()
+	//HandleMonikers()
 
 	// HandleLink
 	// HandleLinkResolve

@@ -1,4 +1,6 @@
 github.com/piot/go-lsp v0.0.0-20210220181107-35e860d26939 h1:JbtfDuDGJFGUV/8d0A4dUzl8MVKDCqPV3z6jTaCBhP4=
 github.com/piot/go-lsp v0.0.0-20210220181107-35e860d26939/go.mod h1:o4Pvk+69/ymRoFZnzgXIIqegHGnAguo9UZR9nJpOf+o=
+github.com/piot/go-lsp v0.0.0-20210222110810-23ed41c3b140 h1:MsaGBJoAmRXNiibdwVFOhURZGr9/aj6x6hhb66qi4y0=
+github.com/piot/go-lsp v0.0.0-20210222110810-23ed41c3b140/go.mod h1:o4Pvk+69/ymRoFZnzgXIIqegHGnAguo9UZR9nJpOf+o=
 github.com/piot/jsonrpc2 v0.0.0-20210220142131-b277991378fa h1:FtrijhH82PF6+ji/AMn7M1bgQjqwE9ByyODiemaDKq4=
 github.com/piot/jsonrpc2 v0.0.0-20210220142131-b277991378fa/go.mod h1:s+tl/s19xr+adNH5UV+e6ULdl+HygO2nhYnFGqRZqXc=

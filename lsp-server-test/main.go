@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/piot/go-lsp"
 
 	"github.com/piot/lsp-server/lspserv"
@@ -61,11 +63,11 @@ func (m *MyHandler) HandleGotoTypeDefinition(params lsp.TextDocumentPositionPara
 }
 
 // Called after GotoDefinition is used?
-func (m *MyHandler) HandleTextDocumentReferences(params lsp.ReferenceParams, conn lspserv.Connection) ([]*lsp.Location, error) {
+func (m *MyHandler) HandleReferences(params lsp.ReferenceParams, conn lspserv.Connection) ([]*lsp.Location, error) {
 	return []*lsp.Location{}, nil
 }
 
-func (m *MyHandler) HandleTextDocumentCompletion(params lsp.CompletionParams, conn lspserv.Connection) (*lsp.CompletionList, error) {
+func (m *MyHandler) HandleCompletion(params lsp.CompletionParams, conn lspserv.Connection) (*lsp.CompletionList, error) {
 	return &lsp.CompletionList{
 		IsIncomplete: false,
 		Items: []lsp.CompletionItem{
@@ -91,7 +93,73 @@ func (m *MyHandler) HandleTextDocumentCompletion(params lsp.CompletionParams, co
 	}, nil
 }
 
-func (m *MyHandler) HandleTextDocumentSignatureHelp(params lsp.TextDocumentPositionParams, conn lspserv.Connection) (*lsp.SignatureHelp, error) {
+func (m *MyHandler) HandleCompletionItemResolve(params lsp.CompletionItem, conn lspserv.Connection) (*lsp.CompletionItem, error) {
+	return &params, nil
+}
+
+func (m *MyHandler) HandleFindReferences(params lsp.ReferenceParams, conn lspserv.Connection) ([]*lsp.Location, error) {
+	return []*lsp.Location{
+
+		{
+			URI: params.TextDocument.URI,
+			Range: lsp.Range{
+				Start: lsp.Position{
+					Line:      3,
+					Character: 0,
+				},
+				End: lsp.Position{
+					Line:      3,
+					Character: 5,
+				},
+			},
+		},
+		{
+			URI: params.TextDocument.URI,
+			Range: lsp.Range{
+				Start: lsp.Position{
+					Line:      5,
+					Character: 0,
+				},
+				End: lsp.Position{
+					Line:      5,
+					Character: 5,
+				},
+			},
+		},
+	}, nil
+}
+
+func (m *MyHandler) HandleFormatting(params lsp.DocumentFormattingParams, conn lspserv.Connection) ([]*lsp.TextEdit, error) {
+	return []*lsp.TextEdit{
+		{
+			Range: lsp.Range{
+				Start: lsp.Position{
+					Line:      0,
+					Character: 0,
+				},
+				End: lsp.Position{
+					Line:      0,
+					Character: 0,
+				},
+			},
+			NewText: "This is now formatted. Happy?",
+		},
+	}, nil
+}
+
+func (m *MyHandler) HandleGotoDeclaration(params lsp.DeclarationOptions, conn lspserv.Connection) (*lsp.Location, error) {
+	return nil, fmt.Errorf("this language doesn't support goto declaration")
+}
+
+func (m *MyHandler) HandleGotoImplementation(params lsp.TextDocumentPositionParams, conn lspserv.Connection) (*lsp.Location, error) {
+	return nil, fmt.Errorf("this language doesn't support goto implementation")
+}
+
+func (m *MyHandler) HandleHighlights(params lsp.DocumentHighlightParams, conn lspserv.Connection) ([]*lsp.DocumentHighlight, error) {
+	return nil, fmt.Errorf("this language doesn't support highlights yet")
+}
+
+func (m *MyHandler) HandleSignatureHelp(params lsp.TextDocumentPositionParams, conn lspserv.Connection) (*lsp.SignatureHelp, error) {
 	return &lsp.SignatureHelp{
 		Signatures: []lsp.SignatureInformation{{
 			Label:         "(Int -> a -> b) -> List a -> List b",
@@ -113,7 +181,7 @@ func (m *MyHandler) HandleTextDocumentSignatureHelp(params lsp.TextDocumentPosit
 	}, nil
 }
 
-func (m *MyHandler) HandleTextDocumentSymbol(params lsp.DocumentSymbolParams, conn lspserv.Connection) ([]*lsp.DocumentSymbol, error) {
+func (m *MyHandler) HandleSymbol(params lsp.DocumentSymbolParams, conn lspserv.Connection) ([]*lsp.DocumentSymbol, error) {
 	diagnosticParams := lsp.PublishDiagnosticsParams{
 		URI: params.TextDocument.URI,
 		Diagnostics: []lsp.Diagnostic{
@@ -234,10 +302,51 @@ func (m *MyHandler) HandleCodeActionResolve(params lsp.CodeAction, conn lspserv.
 
 func (m *MyHandler) HandleRename(params lsp.RenameParams) (*lsp.WorkspaceEdit, error) {
 	return &lsp.WorkspaceEdit{
-		Changes: map[string][TextEdit]{
-			
-		}
-	}
+		Changes: map[string][]lsp.TextEdit{},
+	}, nil
+}
+
+func (m *MyHandler) HandleCodeLens(params lsp.CodeLensParams, conn lspserv.Connection) ([]*lsp.CodeLens, error) {
+	return []*lsp.CodeLens{&lsp.CodeLens{
+		Range: lsp.Range{
+			Start: lsp.Position{
+				Line:      4,
+				Character: 0,
+			},
+			End: lsp.Position{
+				Line:      4,
+				Character: 4,
+			},
+		},
+		Command: lsp.Command{
+			Title:     "Some Command here",
+			Command:   "swamp.somecommand",
+			Arguments: nil,
+		},
+		Data: nil,
+	},
+	}, nil
+}
+
+func (m *MyHandler) HandleCodeLensResolve(params lsp.CodeLens, conn lspserv.Connection) (*lsp.CodeLens, error) {
+	return &lsp.CodeLens{
+		Range: lsp.Range{
+			Start: lsp.Position{
+				Line:      4,
+				Character: 0,
+			},
+			End: lsp.Position{
+				Line:      4,
+				Character: 4,
+			},
+		},
+		Command: lsp.Command{
+			Title:     "Some Command here",
+			Command:   "swamp.somecommand",
+			Arguments: nil,
+		},
+		Data: nil,
+	}, nil
 }
 
 func main() {
