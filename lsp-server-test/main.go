@@ -208,6 +208,38 @@ func (m *MyHandler) Reset() error {
 	return nil
 }
 
+func (m *MyHandler) HandleCodeAction(params lsp.CodeActionParams, conn lspserv.Connection) (*lsp.CodeAction, error) {
+	return &lsp.CodeAction{
+		Title: "",
+		Kind:  "",
+		Diagnostics: []lsp.Diagnostic{
+			{
+				Range:              lsp.Range{},
+				Severity:           0,
+				Code:               "",
+				CodeDescription:    &lsp.CodeDescription{},
+				Source:             "",
+				Message:            "",
+				Tags:               []lsp.DiagnosticTag{},
+				RelatedInformation: []lsp.DiagnosticRelatedInformation{},
+				Data:               nil,
+			},
+		},
+	}, nil
+}
+
+func (m *MyHandler) HandleCodeActionResolve(params lsp.CodeAction, conn lspserv.Connection) (*lsp.CodeAction, error) {
+	return &params, nil
+}
+
+func (m *MyHandler) HandleRename(params lsp.RenameParams) (*lsp.WorkspaceEdit, error) {
+	return &lsp.WorkspaceEdit{
+		Changes: map[string][TextEdit]{
+			
+		}
+	}
+}
+
 func main() {
 	lspserv.RunForever(":6009", &MyHandler{})
 }
