@@ -97,6 +97,22 @@ func (m *MyHandler) HandleDidOpen(params lsp.DidOpenTextDocumentParams, conn lsp
 	return nil
 }
 
+func (m *MyHandler) HandleDidChange(params lsp.DidChangeTextDocumentParams, conn lspserv.Connection) error {
+	return nil
+}
+
+func (m *MyHandler) HandleDidClose(params lsp.DidCloseTextDocumentParams, conn lspserv.Connection) error {
+	return nil
+}
+
+func (m *MyHandler) HandleDidSave(params lsp.DidSaveTextDocumentParams, conn lspserv.Connection) error {
+	return nil
+}
+
+func (m *MyHandler) HandleWillSave(params lsp.WillSaveTextDocumentParams, conn lspserv.Connection) error {
+	return nil
+}
+
 func (m *MyHandler) HandleLinkedEditingRange(params lsp.LinkedEditingRangeParams, conn lspserv.Connection) (*lsp.LinkedEditingRanges, error) {
 	return nil, nil
 }

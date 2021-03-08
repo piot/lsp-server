@@ -64,8 +64,14 @@ type Handler interface {
 	 */
 	HandleCodeLens(params lsp.CodeLensParams, conn Connection) ([]*lsp.CodeLens, error)
 	HandleCodeLensResolve(params lsp.CodeLens, conn Connection) (*lsp.CodeLens, error)
+
+	// File System
 	HandleDidChangeWatchedFiles(params lsp.DidChangeWatchedFilesParams, conn Connection) error
 	HandleDidOpen(params lsp.DidOpenTextDocumentParams, conn Connection) error
+	HandleDidChange(params lsp.DidChangeTextDocumentParams, conn Connection) error
+	HandleDidClose(params lsp.DidCloseTextDocumentParams, conn Connection) error
+	HandleWillSave(params lsp.WillSaveTextDocumentParams, conn Connection) error
+	HandleDidSave(params lsp.DidSaveTextDocumentParams, conn Connection) error
 }
 
 type SendOut struct {
@@ -93,6 +99,7 @@ func NewLspRequests(handler Handler) *HandleLspRequests {
 func isFileSystemRequest(method string) bool {
 	return method == "textDocument/didOpen" ||
 		method == "textDocument/didChange" ||
+		method == "textDocument/willSave" ||
 		method == "textDocument/didSave" ||
 		method == "textDocument/didClose"
 }
@@ -149,21 +156,28 @@ func (h *HandleLspRequests) handleFileSystemRequest(ctx context.Context, req *js
 			return err
 		}
 
-		return nil
-
-	case "textDocument/didSave":
-		var params lsp.DidSaveTextDocumentParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return err
-		}
-		return nil
+		return h.handler.HandleDidChange(params, conn)
 
 	case "textDocument/didClose":
 		var params lsp.DidCloseTextDocumentParams
 		if err := json.Unmarshal(*req.Params, &params); err != nil {
 			return err
 		}
-		return nil
+		return h.handler.HandleDidClose(params, conn)
+
+	case "textDocument/willSave":
+		var params lsp.WillSaveTextDocumentParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return err
+		}
+		return h.handler.HandleWillSave(params, conn)
+
+	case "textDocument/didSave":
+		var params lsp.DidSaveTextDocumentParams
+		if err := json.Unmarshal(*req.Params, &params); err != nil {
+			return err
+		}
+		return h.handler.HandleDidSave(params, conn)
 
 	default:
 		return fmt.Errorf("HandleLspRequests: unexpected file system request %v ", req.Method)
@@ -184,11 +198,11 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 		}
 
 		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams, Data: nil, Message: ""}
 		}
 
 		if err := h.handler.Reset(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reset failed %w", err)
 		}
 
 		h.isInitialized = true
@@ -231,10 +245,17 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 			"documentation",
 			"defaultLibrary",
 		}
+		syncOptions := lsp.TextDocumentSyncOptions{
+			OpenClose:         true,
+			Change:            kind,
+			WillSave:          true,
+			WillSaveWaitUntil: false,
+			Save:              &lsp.SaveOptions{IncludeText: true},
+		}
 
 		return lsp.InitializeResult{
 			Capabilities: lsp.ServerCapabilities{
-				TextDocumentSync:       &lsp.TextDocumentSyncOptionsOrKind{Kind: &kind},
+				TextDocumentSync:       &lsp.TextDocumentSyncOptionsOrKind{Options: &syncOptions, Kind: nil},
 				CompletionProvider:     &lsp.CompletionOptions{ResolveProvider: false, TriggerCharacters: []string{"."}},
 				HoverProvider:          true,
 				SignatureHelpProvider:  &lsp.SignatureHelpOptions{TriggerCharacters: []string{"(", ","}},
@@ -243,35 +264,87 @@ func (h *HandleLspRequests) HandleInternal(ctx context.Context, conn jsonrpc2.JS
 				TypeDefinitionProvider: true,
 				ImplementationProvider: &lsp.ImplementationOptions{},
 				ReferencesProvider: &lsp.ReferenceOptions{
-					WorkDoneProgressOptions: lsp.WorkDoneProgressOptions{},
+					WorkDoneProgressOptions: lsp.WorkDoneProgressOptions{
+						WorkDoneProgress: false,
+					},
 				},
-				DocumentHighlightProvider:        &lsp.DocumentHighlightOptions{},
-				DocumentSymbolProvider:           true,
-				DocumentLinkProvider:             nil, // TODO: Not sure what this is yet.
-				ColorProvider:                    nil,
-				DocumentFormattingProvider:       true,
-				CodeActionProvider:               false,
-				CodeLensProvider:                 &lsp.CodeLensOptions{ResolveProvider: false},
-				DocumentRangeFormattingProvider:  false,
-				DocumentOnTypeFormattingProvider: &lsp.DocumentOnTypeFormattingOptions{},
-				RenameProvider:                   true,
-				FoldingRangeProvider:             nil,
-				ExecuteCommandProvider:           &lsp.ExecuteCommandOptions{},
-				SelectionRangeProvider:           &lsp.SelectionRangeOptions{},
-				LinkedEditingRangeProvider:       &lsp.LinkedEditingRangeOptions{},
-				CallHierarchyProvider:            &lsp.CallHierarchyOptions{},
+				DocumentHighlightProvider:       &lsp.DocumentHighlightOptions{},
+				DocumentSymbolProvider:          true,
+				DocumentLinkProvider:            nil, // TODO: Not sure what this is yet.
+				ColorProvider:                   nil,
+				DocumentFormattingProvider:      true,
+				CodeActionProvider:              false,
+				CodeLensProvider:                &lsp.CodeLensOptions{ResolveProvider: false},
+				DocumentRangeFormattingProvider: false,
+				DocumentOnTypeFormattingProvider: &lsp.DocumentOnTypeFormattingOptions{
+					FirstTriggerCharacter: "",
+					MoreTriggerCharacter:  []string{},
+				},
+				RenameProvider:       true,
+				FoldingRangeProvider: nil,
+				ExecuteCommandProvider: &lsp.ExecuteCommandOptions{
+					Commands: []string{},
+				},
+				SelectionRangeProvider: &lsp.SelectionRangeOptions{
+					WorkDoneProgressOptions: lsp.WorkDoneProgressOptions{
+						WorkDoneProgress: false,
+					},
+				},
+				LinkedEditingRangeProvider: &lsp.LinkedEditingRangeOptions{
+					WorkDoneProgressOptions: lsp.WorkDoneProgressOptions{
+						WorkDoneProgress: false,
+					},
+				},
+				CallHierarchyProvider: &lsp.CallHierarchyOptions{
+					WorkDoneProgressOptions: lsp.WorkDoneProgressOptions{
+						WorkDoneProgress: false,
+					},
+				},
 				SemanticTokensProvider: &lsp.SemanticTokensOptions{
-					WorkDoneProgressOptions: lsp.WorkDoneProgressOptions{},
+					WorkDoneProgressOptions: lsp.WorkDoneProgressOptions{
+						WorkDoneProgress: false,
+					},
 					Legend: lsp.SemanticTokensLegend{
 						TokenTypes:     tokenTypes,
 						TokenModifiers: tokenModifiers,
 					},
 					Range: false,
-					Full:  &lsp.SemanticTokenOptionsFull{},
+					Full: &lsp.SemanticTokenOptionsFull{
+						Delta: false,
+					},
 				},
-				MonikerProvider:              &lsp.MonikerOptions{},
-				WorkspaceSymbolProvider:      true,
-				Workspace:                    &lsp.WorkspaceOptions{},
+				MonikerProvider: &lsp.MonikerOptions{
+					WorkDoneProgressOptions: lsp.WorkDoneProgressOptions{
+						WorkDoneProgress: false,
+					},
+				},
+				WorkspaceSymbolProvider: true,
+				Workspace: &lsp.WorkspaceOptions{
+					WorkspaceFolders: &lsp.WorkspaceFoldersServerCapabilities{
+						Supported:           false,
+						ChangeNotifications: "",
+					},
+					FileOperations: &lsp.WorkspaceOptionsFileOperations{
+						DidCreate: &lsp.FileOperationRegistrationOptions{
+							Filters: []lsp.FileOperationFilter{},
+						},
+						WillCreate: &lsp.FileOperationRegistrationOptions{
+							Filters: []lsp.FileOperationFilter{},
+						},
+						DidRename: &lsp.FileOperationRegistrationOptions{
+							Filters: []lsp.FileOperationFilter{},
+						},
+						WillRename: &lsp.FileOperationRegistrationOptions{
+							Filters: []lsp.FileOperationFilter{},
+						},
+						DidDelete: &lsp.FileOperationRegistrationOptions{
+							Filters: []lsp.FileOperationFilter{},
+						},
+						WillDelete: &lsp.FileOperationRegistrationOptions{
+							Filters: []lsp.FileOperationFilter{},
+						},
+					},
+				},
 				Experimental:                 nil,
 				XWorkspaceReferencesProvider: false,
 				XDefinitionProvider:          false,
